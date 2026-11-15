@@ -30,15 +30,16 @@ public class VpnCaptureTest {
         assertNull("VPN permission not granted",android.net.VpnService.prepare(ctx));
         String command="sh /data/local/tmp/rak-http.sh";
         String baseline=shell(command);assertTrue("Baseline HTTP failed: "+baseline,baseline.contains("HTTP/1."));
+        String udpCommand="sh /data/local/tmp/rak-udp.sh";String udpBaseline=shell(udpCommand);assertTrue("Baseline UDP failed: "+udpBaseline,udpBaseline.contains("rakrecorder-echo:rakrecorder-test"));
         int before=new SessionStore(ctx).list().size();
         Intent start=new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_START).putExtra("package","com.android.shell");ctx.startForegroundService(start);
         long deadline=System.currentTimeMillis()+15000;while(!RecorderVpnService.isRunning() && System.currentTimeMillis()<deadline)Thread.sleep(200);
         assertTrue("VPN service did not start",RecorderVpnService.isRunning());
-        String response=shell(command);
+        String response=shell(command);String udpResponse=shell(udpCommand);
         ctx.startService(new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_STOP));
         deadline=System.currentTimeMillis()+15000;while(RecorderVpnService.isRunning() && System.currentTimeMillis()<deadline)Thread.sleep(200);
         assertFalse("VPN service did not stop",RecorderVpnService.isRunning());
-        java.util.List<JSONObject> sessions=new SessionStore(ctx).list();assertTrue("Session missing",sessions.size()>before);JSONObject session=sessions.get(0);assertEquals("live_vpn",session.getString("source"));assertTrue("No TCP packets recorded; response: "+response,session.getLong("tcp")>0);assertTrue("HTTP response did not arrive: "+response,response.contains("HTTP/1."));
+        java.util.List<JSONObject> sessions=new SessionStore(ctx).list();assertTrue("Session missing",sessions.size()>before);JSONObject session=sessions.get(0);assertEquals("live_vpn",session.getString("source"));assertTrue("No TCP packets recorded; response: "+response,session.getLong("tcp")>0);assertTrue("HTTP response did not arrive: "+response,response.contains("HTTP/1."));assertTrue("UDP response did not arrive: "+udpResponse,udpResponse.contains("rakrecorder-echo:rakrecorder-test"));assertTrue("No UDP packets recorded",session.getLong("udp")>0);
         activity.finish();
     }
 }
