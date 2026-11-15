@@ -16,12 +16,13 @@ final class SessionStore {
     SessionStore(Context context) {root=new File(context.getFilesDir(),"sessions"); if (!root.exists() && !root.mkdirs()) throw new IllegalStateException("Не удалось создать папку сессий");}
     File file(String id) { if (!id.matches("[0-9a-f-]{36}")) throw new IllegalArgumentException("Некорректный ID"); return new File(root,id); }
     private static void copy(InputStream in,OutputStream out) throws IOException {byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) {if(n>0)out.write(b,0,n);}}
-    String importPcap(InputStream input) throws Exception {
+    String importPcap(InputStream input) throws Exception { return importPcap(input,"pcap_import"); }
+    String importPcap(InputStream input, String source) throws Exception {
         String id=UUID.randomUUID().toString(); File dir=file(id); if(!dir.mkdir()) throw new IOException("Не удалось создать сессию");
         try {
             File raw=new File(dir,"capture.pcap"); try(OutputStream out=new BufferedOutputStream(new FileOutputStream(raw))) {copy(input,out);}
             PcapReader.Result r; try(InputStream in=new FileInputStream(raw)) {r=PcapReader.analyze(in);}
-            JSONObject s=new JSONObject(); s.put("schema_version","1.0.0");s.put("session_id",id);s.put("source","pcap_import");s.put("created_utc",Instant.now().toString());s.put("packets",r.packets);s.put("udp",r.udp);s.put("tcp",r.tcp);s.put("other",r.other);s.put("udp_5125",r.udp5125);s.put("udp_5127",r.udp5127);s.put("first_us",r.firstMicros);s.put("last_us",r.lastMicros);s.put("markers",new JSONArray()); write(id,s); return id;
+            JSONObject s=new JSONObject(); s.put("schema_version","1.0.0");s.put("session_id",id);s.put("source",source);s.put("created_utc",Instant.now().toString());s.put("packets",r.packets);s.put("udp",r.udp);s.put("tcp",r.tcp);s.put("other",r.other);s.put("udp_5125",r.udp5125);s.put("udp_5127",r.udp5127);s.put("first_us",r.firstMicros);s.put("last_us",r.lastMicros);s.put("markers",new JSONArray()); write(id,s); return id;
         } catch(Exception e) {deleteTree(dir); throw e;}
     }
     JSONObject read(String id) throws Exception {try(InputStream in=new FileInputStream(new File(file(id),"session.json"))) {ByteArrayOutputStream out=new ByteArrayOutputStream();copy(in,out);return new JSONObject(out.toString("UTF-8"));}}
@@ -34,7 +35,7 @@ final class SessionStore {
     private static void entry(ZipOutputStream z,String name,byte[] data,Map<String,String> sums) throws Exception {z.putNextEntry(new ZipEntry(name));z.write(data);z.closeEntry();sums.put(name,hex(MessageDigest.getInstance("SHA-256").digest(data)));}
     private static String hex(byte[] bytes){StringBuilder b=new StringBuilder();for(byte x:bytes)b.append(String.format(Locale.ROOT,"%02x",x&255));return b.toString();}
     void export(String id,boolean includeRaw,OutputStream target) throws Exception {
-        JSONObject s=read(id);Map<String,String> sums=new LinkedHashMap<>();JSONObject manifest=new JSONObject();manifest.put("schema_version","1.0.0");manifest.put("app","RakRecorder Studio");manifest.put("session_id",id);manifest.put("source","pcap_import");manifest.put("created_utc",s.getString("created_utc"));manifest.put("raw_pcap_included",includeRaw);manifest.put("xyz_verified",false);
+        JSONObject s=read(id);Map<String,String> sums=new LinkedHashMap<>();JSONObject manifest=new JSONObject();manifest.put("schema_version","1.0.0");manifest.put("app","RakRecorder Studio");manifest.put("session_id",id);manifest.put("source",s.optString("source","pcap_import"));manifest.put("created_utc",s.getString("created_utc"));manifest.put("raw_pcap_included",includeRaw);manifest.put("xyz_verified",false);
         JSONObject route=new JSONObject();route.put("schema_version","1.0.0");route.put("session_id",id);route.put("has_verified_coordinates",false);route.put("reason","game_position_not_decoded");route.put("segments",new JSONArray());route.put("manual_markers_without_xyz",s.getJSONArray("markers"));
         JSONObject diag=new JSONObject(s.toString());diag.remove("markers");diag.put("decoder_status","unsupported");
         try(ZipOutputStream z=new ZipOutputStream(new BufferedOutputStream(target))) {

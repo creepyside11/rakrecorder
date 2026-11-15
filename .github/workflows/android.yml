@@ -16,6 +16,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Test native VPN engine on Linux
+        run: |
+          cmake -S app/src/main/cpp/zdtun/tests -B /tmp/zdtun-tests
+          cmake --build /tmp/zdtun-tests --parallel 2
+          ctest --test-dir /tmp/zdtun-tests --output-on-failure
       - run: gradle --no-daemon testDebugUnitTest assembleDebug
       - uses: actions/upload-artifact@v4
         with:

@@ -10,6 +10,8 @@ import java.io.*;
 /** Experimental local VPN; user must opt in and choose an installed application. */
 public final class RecorderVpnService extends VpnService {
     public static final String ACTION_START="dev.rakrecorder.START", ACTION_STOP="dev.rakrecorder.STOP";
+    private static volatile boolean active;
+    public static boolean isRunning(){return active;}
     private volatile boolean stopping; private ParcelFileDescriptor tun; private Thread worker;
     static {System.loadLibrary("rakcapture");}
     private native int runTunnel(int fd,String path);
@@ -17,7 +19,7 @@ public final class RecorderVpnService extends VpnService {
     @Override public void onCreate(){super.onCreate();NotificationChannel c=new NotificationChannel("capture","Захват трафика",NotificationManager.IMPORTANCE_LOW);getSystemService(NotificationManager.class).createNotificationChannel(c);}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent==null)return START_NOT_STICKY;
-        if(ACTION_STOP.equals(intent.getAction())){stopping=true;return START_NOT_STICKY;}
+        if(ACTION_STOP.equals(intent.getAction())){stopping=true;if(worker==null)stopSelf();return START_NOT_STICKY;}
         if(!ACTION_START.equals(intent.getAction()) || worker!=null)return START_NOT_STICKY;
         String pkg=intent.getStringExtra("package");
         Intent stop=new Intent(this,RecorderVpnService.class).setAction(ACTION_STOP);
@@ -27,12 +29,12 @@ public final class RecorderVpnService extends VpnService {
         try {
             if(pkg==null || pkg.isEmpty() || pkg.equals(getPackageName()))throw new IllegalArgumentException("Выберите установленную игру");
             Builder b=new Builder().setSession("RakRecorder").setMtu(1500).addAddress("10.20.30.1",32).addRoute("0.0.0.0",0).addAddress("fd00:2020:3030::1",128).addRoute("::",0).addDnsServer("1.1.1.1").addAllowedApplication(pkg);
-            tun=b.establish();if(tun==null)throw new IOException("Android не создал VPN");
+            tun=b.establish();if(tun==null)throw new IOException("Android не создал VPN");active=true;
             File raw=File.createTempFile("unfinished-capture-", ".pcap",getFilesDir());
             worker=new Thread(()->{int status=runTunnel(tun.getFd(),raw.getAbsolutePath());try{tun.close();}catch(IOException ignored){}tun=null;
-                if(status==0){try(InputStream in=new FileInputStream(raw)){new SessionStore(this).importPcap(in);}catch(Exception e){status=-20;}}
-                if(status==0)raw.delete();Intent result=new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",status);sendBroadcast(result);stopSelf();},"rak-vpn");worker.start();
-        }catch(Exception e){sendBroadcast(new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",-21).putExtra("error",e.getMessage()));stopSelf();}
+                if(status==0){try(InputStream in=new FileInputStream(raw)){new SessionStore(this).importPcap(in,"live_vpn");}catch(Exception e){status=-20;}}
+                if(status==0)raw.delete();active=false;Intent result=new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",status);sendBroadcast(result);stopSelf();},"rak-vpn");worker.start();
+        }catch(Exception e){active=false;if(tun!=null){try{tun.close();}catch(IOException ignored){}tun=null;}sendBroadcast(new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",-21).putExtra("error",e.getMessage()));stopSelf();}
         return START_NOT_STICKY;
     }
     @Override public void onRevoke(){stopping=true;super.onRevoke();}
