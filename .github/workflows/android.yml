@@ -32,9 +32,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view v0.1.1-alpha >/dev/null 2>&1; then
-            gh release create v0.1.1-alpha app/build/outputs/apk/debug/app-debug.apk \
+          if ! gh release view v0.2.0-alpha >/dev/null 2>&1; then
+            gh release create v0.2.0-alpha app/build/outputs/apk/debug/app-debug.apk \
               --target "$GITHUB_SHA" --prerelease \
-              --title "RakRecorder 0.1.1 — ранняя альфа" \
-              --notes "Только импорт PCAP, ручные отметки и ZIP. VPN-захват, маршрут, декодирование игры и запись экрана отсутствуют. Это debug APK; подпись может отличаться у следующих сборок. Экспорт PCAP может содержать личные данные."
+              --title "RakRecorder 0.2.0 — экспериментальная альфа" \
+              --notes "Экспериментальная версия: локальный VPN, выбор приложения, ручные отметки, импорт PCAP и ZIP. TCP и UDP проверены на эмуляторе; с игрой и на физическом устройстве не проверено. Игровые XYZ, автоматический маршрут и запись экрана не реализованы. Это debug APK; подпись может отличаться у других сборок. PCAP может содержать личные данные."
           fi
