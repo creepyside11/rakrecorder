@@ -30,7 +30,7 @@ final class SessionStore {
     void addMarker(String id, String type, String note, long offset) throws Exception {if(offset<0)throw new IllegalArgumentException("Время не может быть отрицательным");JSONObject s=read(id), marker=new JSONObject();marker.put("id",UUID.randomUUID().toString());marker.put("type",type);marker.put("note",note);marker.put("time_ms",offset);marker.put("source","manual");marker.put("position",JSONObject.NULL);marker.put("position_status","unknown");s.getJSONArray("markers").put(marker);write(id,s);}
     void delete(String id) throws IOException {deleteTree(file(id));}
     private static void deleteTree(File f) throws IOException {if(f.isDirectory()){File[] children=f.listFiles();if(children!=null)for(File child:children)deleteTree(child);}if(f.exists()&&!f.delete())throw new IOException("Не удалось удалить "+f.getName());}
-    private static byte[] json(JSONObject j) {return j.toString(2).getBytes(StandardCharsets.UTF_8);}
+    private static byte[] json(JSONObject j) throws JSONException {return j.toString(2).getBytes(StandardCharsets.UTF_8);}
     private static void entry(ZipOutputStream z,String name,byte[] data,Map<String,String> sums) throws Exception {z.putNextEntry(new ZipEntry(name));z.write(data);z.closeEntry();sums.put(name,hex(MessageDigest.getInstance("SHA-256").digest(data)));}
     private static String hex(byte[] bytes){StringBuilder b=new StringBuilder();for(byte x:bytes)b.append(String.format(Locale.ROOT,"%02x",x&255));return b.toString();}
     void export(String id,boolean includeRaw,OutputStream target) throws Exception {
