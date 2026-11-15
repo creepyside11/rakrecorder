@@ -28,16 +28,17 @@ public class VpnCaptureTest {
         Intent permission=android.net.VpnService.prepare(ctx);
         if(permission!=null){inst.runOnMainSync(()->activity.startActivityForResult(permission,50));androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);androidx.test.uiautomator.UiObject2 ok=device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.res("android","button1")),10000);assertNotNull("VPN consent button missing",ok);ok.click();Thread.sleep(1000);}
         assertNull("VPN permission not granted",android.net.VpnService.prepare(ctx));
+        String command="sh -c \"printf 'GET / HTTP/1.0\\r\\n\\r\\n' | nc -w 5 10.0.2.2 8765 2>&1\"";
+        String baseline=shell(command);assertTrue("Baseline HTTP failed: "+baseline,baseline.contains("HTTP/1."));
         int before=new SessionStore(ctx).list().size();
         Intent start=new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_START).putExtra("package","com.android.shell");ctx.startForegroundService(start);
         long deadline=System.currentTimeMillis()+15000;while(!RecorderVpnService.isRunning() && System.currentTimeMillis()<deadline)Thread.sleep(200);
         assertTrue("VPN service did not start",RecorderVpnService.isRunning());
-        String response=shell("sh -c \"printf 'GET / HTTP/1.0\\r\\n\\r\\n' | nc -w 5 10.0.2.2 8765\"");
+        String response=shell(command);
         ctx.startService(new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_STOP));
         deadline=System.currentTimeMillis()+15000;while(RecorderVpnService.isRunning() && System.currentTimeMillis()<deadline)Thread.sleep(200);
         assertFalse("VPN service did not stop",RecorderVpnService.isRunning());
-        assertTrue("HTTP response did not arrive: "+response,response.contains("HTTP/1."));
-        java.util.List<JSONObject> sessions=new SessionStore(ctx).list();assertTrue("Session missing",sessions.size()>before);JSONObject session=sessions.get(0);assertEquals("live_vpn",session.getString("source"));assertTrue("No TCP packets recorded",session.getLong("tcp")>0);
+        java.util.List<JSONObject> sessions=new SessionStore(ctx).list();assertTrue("Session missing",sessions.size()>before);JSONObject session=sessions.get(0);assertEquals("live_vpn",session.getString("source"));assertTrue("No TCP packets recorded; response: "+response,session.getLong("tcp")>0);assertTrue("HTTP response did not arrive: "+response,response.contains("HTTP/1."));
         activity.finish();
     }
 }

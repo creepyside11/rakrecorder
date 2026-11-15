@@ -48,7 +48,17 @@ public final class PcapReader {
         if (r.linkType == 1) { if (p.length < 14) { r.other++; return; } int type=(u(p[12])<<8)|u(p[13]); pos=14; while ((type==0x8100 || type==0x88a8) && p.length>=pos+4) { type=(u(p[pos+2])<<8)|u(p[pos+3]); pos+=4; } if (type!=0x0800 && type!=0x86dd) { r.other++; return; } }
         if (p.length <= pos) {r.other++; return;} int version=u(p[pos])>>4, proto, offset;
         if (version==4 && p.length>=pos+20) { int ihl=(u(p[pos])&15)*4; if(ihl<20 || p.length<pos+ihl) { r.other++; return; } proto=u(p[pos+9]); offset=pos+ihl; if ((u(p[pos+6])&31)!=0 || u(p[pos+7])!=0) {r.other++; return;} }
-        else if (version==6 && p.length>=pos+40) {proto=u(p[pos+6]); offset=pos+40;} else {r.other++; return;}
+        else if (version==6 && p.length>=pos+40) {
+            proto=u(p[pos+6]); offset=pos+40; int extensions=0;
+            while (proto==0 || proto==43 || proto==60 || proto==44 || proto==51) {
+                if(++extensions>16 || p.length<offset+2) {r.other++;return;}
+                int next=u(p[offset]), length;
+                if(proto==44) {length=8;if(p.length<offset+length || u(p[offset+2])!=0 || (u(p[offset+3]) & 0xf8)!=0){r.other++;return;}}
+                else if(proto==51) length=(u(p[offset+1])+2)*4;
+                else length=(u(p[offset+1])+1)*8;
+                if(length<8 || p.length<offset+length){r.other++;return;}offset+=length;proto=next;
+            }
+        } else {r.other++; return;}
         if (proto==6) r.tcp++;
         else if (proto==17) {r.udp++; if(p.length>=offset+4) {int a=(u(p[offset])<<8)|u(p[offset+1]),b=(u(p[offset+2])<<8)|u(p[offset+3]); if(a==5125||b==5125)r.udp5125++; if(a==5127||b==5127)r.udp5127++;} }
         else r.other++;
