@@ -26,7 +26,7 @@ public class VpnCaptureTest {
         Intent ui=new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Activity activity=inst.startActivitySync(ui);
         Intent permission=android.net.VpnService.prepare(ctx);
-        if(permission!=null){inst.runOnMainSync(()->activity.startActivityForResult(permission,50));Thread.sleep(2000);shell("input keyevent 22; input keyevent 66");Thread.sleep(1000);}
+        if(permission!=null){inst.runOnMainSync(()->activity.startActivityForResult(permission,50));androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);androidx.test.uiautomator.UiObject2 ok=device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.res("android","button1")),10000);assertNotNull("VPN consent button missing",ok);ok.click();Thread.sleep(1000);}
         assertNull("VPN permission not granted",android.net.VpnService.prepare(ctx));
         int before=new SessionStore(ctx).list().size();
         Intent start=new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_START).putExtra("package","com.android.shell");ctx.startForegroundService(start);
