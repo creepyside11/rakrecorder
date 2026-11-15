@@ -21,6 +21,14 @@ public class VpnCaptureTest {
         ParcelFileDescriptor p=inst.getUiAutomation().executeShellCommand(command);
         try(InputStream in=new ParcelFileDescriptor.AutoCloseInputStream(p);ByteArrayOutputStream out=new ByteArrayOutputStream()) {byte[] b=new byte[2048];int n;while((n=in.read(b))!=-1)out.write(b,0,n);return out.toString(StandardCharsets.UTF_8.name());}
     }
+    @Test public void exportsManualEventsWithoutRawByDefault() throws Exception {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();SessionStore store=new SessionStore(ctx);
+        java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(24+16+28).order(java.nio.ByteOrder.LITTLE_ENDIAN);b.putInt(0xa1b2c3d4).putShort((short)2).putShort((short)4).putInt(0).putInt(0).putInt(65535).putInt(101);b.putInt(1).putInt(0).putInt(28).putInt(28);byte[] p=new byte[28];p[0]=0x45;p[9]=17;b.put(p);
+        String id=store.importPcap(new ByteArrayInputStream(b.array()));store.addMarker(id,"Начало мини-игры","",100);store.addMarker(id,"Конец мини-игры","",200);
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();store.export(id,false,bytes);java.util.Map<String,byte[]> files=new java.util.HashMap<>();
+        try(java.util.zip.ZipInputStream in=new java.util.zip.ZipInputStream(new ByteArrayInputStream(bytes.toByteArray()))){java.util.zip.ZipEntry e;while((e=in.getNextEntry())!=null){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] data=new byte[512];int n;while((n=in.read(data))!=-1)out.write(data,0,n);files.put(e.getName(),out.toByteArray());}}
+        assertFalse(files.containsKey("raw/capture.pcap"));assertTrue(files.containsKey("diagnostics/checksums.sha256"));assertTrue(files.containsKey("events/events.jsonl"));JSONObject games=new JSONObject(new String(files.get("minigames/minigames.json"),StandardCharsets.UTF_8));assertEquals(1,games.getJSONArray("items").length());JSONObject game=games.getJSONArray("items").getJSONObject(0);assertEquals(100,game.getLong("start_ms"));assertEquals(200,game.getLong("end_ms"));assertTrue(game.isNull("position"));store.delete(id);
+    }
     @Test public void forwardsTcpAndStoresCapture() throws Exception {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();Context ctx=inst.getTargetContext();
         Intent ui=new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
