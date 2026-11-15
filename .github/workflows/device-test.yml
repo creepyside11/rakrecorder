@@ -30,6 +30,7 @@ jobs:
           disable-animations: true
           script: |
             python3 -m http.server 8765 --bind 0.0.0.0 >/tmp/rak-http.log 2>&1 &
+            adb push app/src/androidTest/rak-http.sh /data/local/tmp/rak-http.sh
             gradle --no-daemon connectedDebugAndroidTest || { adb logcat -d -s RakRecorder:E AndroidRuntime:E; exit 1; }
       - name: Upload test report
         if: always()

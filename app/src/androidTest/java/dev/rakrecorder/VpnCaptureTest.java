@@ -28,7 +28,7 @@ public class VpnCaptureTest {
         Intent permission=android.net.VpnService.prepare(ctx);
         if(permission!=null){inst.runOnMainSync(()->activity.startActivityForResult(permission,50));androidx.test.uiautomator.UiDevice device=androidx.test.uiautomator.UiDevice.getInstance(inst);androidx.test.uiautomator.UiObject2 ok=device.wait(androidx.test.uiautomator.Until.findObject(androidx.test.uiautomator.By.res("android","button1")),10000);assertNotNull("VPN consent button missing",ok);ok.click();Thread.sleep(1000);}
         assertNull("VPN permission not granted",android.net.VpnService.prepare(ctx));
-        String command="sh -c \"{ printf 'GET / HTTP/1.0\\r\\n\\r\\n'; sleep 2; } | nc -w 5 10.0.2.2 8765 2>&1\"";
+        String command="sh /data/local/tmp/rak-http.sh";
         String baseline=shell(command);assertTrue("Baseline HTTP failed: "+baseline,baseline.contains("HTTP/1."));
         int before=new SessionStore(ctx).list().size();
         Intent start=new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_START).putExtra("package","com.android.shell");ctx.startForegroundService(start);
