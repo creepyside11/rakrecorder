@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.18)
+project(rakcapture C)
+add_library(rakcapture SHARED capture.c zdtun/zdtun.c zdtun/utils.c)
+target_include_directories(rakcapture PRIVATE zdtun)
+target_compile_definitions(rakcapture PRIVATE _LITTLE_ENDIAN ANDROID NO_DEBUG)
+target_link_libraries(rakcapture log)
