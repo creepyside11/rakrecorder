@@ -25,7 +25,9 @@ public class VpnCaptureTest {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();Context ctx=inst.getTargetContext();
         Intent ui=new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Activity activity=inst.startActivitySync(ui);
-        shell("appops set dev.rakrecorder ACTIVATE_VPN allow");
+        Intent permission=android.net.VpnService.prepare(ctx);
+        if(permission!=null){inst.runOnMainSync(()->activity.startActivityForResult(permission,50));Thread.sleep(2000);shell("input keyevent 22; input keyevent 66");Thread.sleep(1000);}
+        assertNull("VPN permission not granted",android.net.VpnService.prepare(ctx));
         int before=new SessionStore(ctx).list().size();
         Intent start=new Intent(ctx,RecorderVpnService.class).setAction(RecorderVpnService.ACTION_START).putExtra("package","com.android.shell");ctx.startForegroundService(start);
         long deadline=System.currentTimeMillis()+15000;while(!RecorderVpnService.isRunning() && System.currentTimeMillis()<deadline)Thread.sleep(200);

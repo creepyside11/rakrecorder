@@ -37,7 +37,7 @@ public final class RecorderVpnService extends VpnService {
             worker=new Thread(()->{int status=runTunnel(tun.getFd(),raw.getAbsolutePath());try{tun.close();}catch(IOException ignored){}tun=null;
                 if(status==0){try(InputStream in=new FileInputStream(raw)){SessionStore store=new SessionStore(this);String id=store.importPcap(in,"live_vpn");importMarkers(store,id,markerFile);}catch(Exception e){status=-20;}}
                 if(status==0){raw.delete();markerFile.delete();}active=false;Intent result=new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",status);sendBroadcast(result);stopSelf();},"rak-vpn");worker.start();
-        }catch(Exception e){active=false;if(tun!=null){try{tun.close();}catch(IOException ignored){}tun=null;}sendBroadcast(new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",-21).putExtra("error",e.getMessage()));stopSelf();}
+        }catch(Exception e){android.util.Log.e("RakRecorder","VPN start failed",e);active=false;if(tun!=null){try{tun.close();}catch(IOException ignored){}tun=null;}sendBroadcast(new Intent("dev.rakrecorder.CAPTURE_FINISHED").setPackage(getPackageName()).putExtra("status",-21).putExtra("error",e.getMessage()));stopSelf();}
         return START_NOT_STICKY;
     }
     private void showOverlay(){if(!active || stopping || overlay!=null)return;if(!android.provider.Settings.canDrawOverlays(this))return;try{overlay=new CaptureOverlay(this,new CaptureOverlay.Actions(){public void mark(String type){appendMarker(type);}public void stop(){stopping=true;if(overlay!=null){overlay.close();overlay=null;}}});}catch(RuntimeException e){android.util.Log.e("RakRecorder","Overlay unavailable",e);}}
