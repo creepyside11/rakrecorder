@@ -1,29 +1,35 @@
 package dev.rakrecorder;
 
-import android.app.Activity;
-import android.content.Intent;
+import android.app.*;
+import android.content.*;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
-import android.view.Gravity;
+import android.text.InputType;
+import android.view.*;
 import android.widget.*;
-import java.io.InputStream;
+import org.json.*;
+import java.io.*;
 import java.time.Instant;
-import java.util.concurrent.Executors;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
-    private TextView output; private Button open;
-    @Override public void onCreate(Bundle state) {
-        super.onCreate(state);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(36,60,36,30); root.setBackgroundColor(Color.rgb(20,13,36));
-        TextView title=new TextView(this); title.setText("RakRecorder · альфа"); title.setTextColor(Color.WHITE); title.setTextSize(26); root.addView(title);
-        TextView subtitle=new TextView(this); subtitle.setText("Локальный анализ PCAP\nVPN, запись маршрута и декодирование игры ещё не реализованы."); subtitle.setTextSize(16); subtitle.setTextColor(0xffd5c9e8); subtitle.setPadding(0,20,0,30); root.addView(subtitle);
-        open=new Button(this); open.setText("Открыть PCAP"); root.addView(open); open.setOnClickListener(v->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*"); startActivityForResult(i,1);});
-        output=new TextView(this); output.setTextColor(Color.WHITE); output.setTextSize(16); output.setPadding(0,30,0,0); output.setText("Выберите классический PCAP. Файл обрабатывается на устройстве."); ScrollView scroll=new ScrollView(this); scroll.addView(output); root.addView(scroll); setContentView(root);
-    }
-    @Override protected void onActivityResult(int request, int result, Intent data) {
-        super.onActivityResult(request,result,data); if(request!=1 || result!=RESULT_OK || data==null || data.getData()==null)return;
-        open.setEnabled(false); output.setText("Анализ файла…");
-        Executors.newSingleThreadExecutor().execute(()->{String text; try(InputStream in=getContentResolver().openInputStream(data.getData())) { if(in==null) throw new Exception("Не удалось открыть файл"); PcapReader.Result r=PcapReader.analyze(in); text="Пакетов: "+r.packets+"\nUDP: "+r.udp+"\nTCP: "+r.tcp+"\nДругие / нераспознанные: "+r.other+"\nUDP с портом 5125: "+r.udp5125+"\nUDP с портом 5127: "+r.udp5127+"\nПервый пакет: "+format(r.firstMicros)+"\nПоследний пакет: "+format(r.lastMicros)+"\n\nXYZ и игровые события: не определены. Порты сами по себе не доказывают принадлежность к игре."; } catch(Exception e) {text="Ошибка импорта: "+e.getMessage();} final String resultText=text; runOnUiThread(()->{output.setText(resultText);open.setEnabled(true);});});
-    }
-    private String format(long t) {return t<0 ? "нет" : Instant.ofEpochSecond(t/1000000,(t%1000000)*1000).toString();}
+    private static final int PICK=1, SAVE=2;
+    private final ExecutorService io=Executors.newSingleThreadExecutor();
+    private SessionStore store; private LinearLayout body; private String selected; private boolean exportRaw;
+    @Override public void onCreate(Bundle state) {super.onCreate(state);store=new SessionStore(this);if(state!=null)selected=state.getString("selected");showHome();}
+    @Override protected void onSaveInstanceState(Bundle state){state.putString("selected",selected);super.onSaveInstanceState(state);}
+    @Override protected void onDestroy(){io.shutdown();super.onDestroy();}
+    private TextView text(String value,int size,int color){TextView t=new TextView(this);t.setText(value);t.setTextColor(color);t.setTextSize(size);t.setPadding(0,12,0,12);return t;}
+    private void frame(String title) {LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setPadding(30,34,30,20);root.setBackgroundColor(0xff140d24);root.addView(text(title,25,Color.WHITE));ScrollView scroll=new ScrollView(this);body=new LinearLayout(this);body.setOrientation(1);scroll.addView(body);root.addView(scroll);setContentView(root);}
+    private void label(String s){body.addView(text(s,16,0xffe0d6ed));}
+    private void button(String title,Runnable action){Button b=new Button(this);b.setText(title);b.setAllCaps(false);body.addView(b);b.setOnClickListener(v->action.run());}
+    private void error(Exception e){new AlertDialog.Builder(this).setTitle("Ошибка").setMessage(e.getMessage()==null?e.toString():e.getMessage()).setPositiveButton("OK",null).show();}
+    private void showHome(){frame("RakRecorder Studio · альфа");label("Локальные сессии PCAP\nЗапись через VPN и автоматическое определение маршрута пока недоступны.");button("Импортировать PCAP",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");startActivityForResult(i,PICK);});List<JSONObject> sessions=store.list();if(sessions.isEmpty())label("Сессий пока нет.");for(JSONObject s:sessions){String id=s.optString("session_id");button("Сессия "+s.optString("created_utc")+" · пакетов: "+s.optLong("packets"),()->{selected=id;showSession();});}}
+    private void showSession(){try {JSONObject s=store.read(selected);frame("Сессия");button("← Все сессии",this::showHome);label("Импорт: "+s.optString("created_utc")+"\nПакетов: "+s.getLong("packets")+"\nUDP: "+s.getLong("udp")+" · TCP: "+s.getLong("tcp")+"\nUDP порт 5125: "+s.getLong("udp_5125")+" · порт 5127: "+s.getLong("udp_5127")+"\nПервый пакет: "+format(s.getLong("first_us"))+"\nПоследний пакет: "+format(s.getLong("last_us"))+"\n\nXYZ и игровые события не декодированы. Порт сам по себе не подтверждает принадлежность к игре.");button("Добавить ручную отметку",this::markerDialog);JSONArray m=s.getJSONArray("markers");label("Отметки: "+m.length());for(int i=0;i<m.length();i++){JSONObject x=m.getJSONObject(i);label((i+1)+". "+x.getString("type")+" · "+x.getLong("time_ms")+" мс\n"+x.optString("note")+"\nКоординаты: неизвестно");}if(m.length()>0)button("Отменить последнюю отметку",()->{try{JSONObject q=store.read(selected);JSONArray a=q.getJSONArray("markers");a.remove(a.length()-1);store.write(selected,q);showSession();}catch(Exception e){error(e);}});button("Экспортировать ZIP",this::exportDialog);button("Удалить сессию",()->new AlertDialog.Builder(this).setTitle("Удалить сессию?").setMessage("Локальная копия PCAP и отметки будут удалены.").setNegativeButton("Отмена",null).setPositiveButton("Удалить",(d,w)->{try{store.delete(selected);selected=null;showHome();}catch(Exception e){error(e);}}).show());}catch(Exception e){selected=null;error(e);showHome();}}
+    private void markerDialog(){LinearLayout form=new LinearLayout(this);form.setOrientation(1);form.setPadding(25,10,25,0);Spinner type=new Spinner(this);String[] types={"Точка","Начало мини-игры","Конец мини-игры","Событие","Комментарий"};type.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,types));form.addView(type);EditText seconds=new EditText(this);seconds.setHint("Секунды от первого пакета");seconds.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);form.addView(seconds);EditText note=new EditText(this);note.setHint("Комментарий (необязательно)");form.addView(note);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Ручная отметка").setView(form).setNegativeButton("Отмена",null).setPositiveButton("Сохранить",null).create();dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{try{double sec=Double.parseDouble(seconds.getText().toString());if(!Double.isFinite(sec)||sec<0||sec>Long.MAX_VALUE/1000d)throw new IllegalArgumentException("Укажите корректное время");store.addMarker(selected,types[type.getSelectedItemPosition()],note.getText().toString(),(long)(sec*1000));dialog.dismiss();showSession();}catch(Exception e){error(e);}}));dialog.show();}
+    private void exportDialog(){CheckBox raw=new CheckBox(this);raw.setText("Включить исходный PCAP (может содержать чувствительные данные)");new AlertDialog.Builder(this).setTitle("Экспорт сессии").setMessage("Архив содержит отметки и диагностику. Координаты не определены.").setView(raw).setNegativeButton("Отмена",null).setPositiveButton("Выбрать файл",(d,w)->{exportRaw=raw.isChecked();Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"RakRecorder-"+selected.substring(0,8)+".zip");startActivityForResult(i,SAVE);}).show();}
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();if(request==PICK){frame("Импорт…");label("Не закрывайте приложение во время обработки.");io.execute(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Не удалось открыть файл");String id=store.importPcap(in);runOnUiThread(()->{selected=id;showSession();});}catch(Exception e){runOnUiThread(()->{showHome();error(e);});}});}else if(request==SAVE){String id=selected;boolean raw=exportRaw;io.execute(()->{try(OutputStream out=getContentResolver().openOutputStream(uri,"w")){if(out==null)throw new IOException("Не удалось открыть файл для записи");store.export(id,raw,out);runOnUiThread(()->Toast.makeText(this,"ZIP сохранён",Toast.LENGTH_LONG).show());}catch(Exception e){runOnUiThread(()->error(e));}});}}
+    private String format(long t){return t<0?"нет":Instant.ofEpochSecond(t/1000000,(t%1000000)*1000).toString();}
 }
